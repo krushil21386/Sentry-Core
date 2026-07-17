@@ -16,12 +16,15 @@ FAILED_LOGIN_RE = re.compile(
 SUCCESS_LOGIN_RE = re.compile(
     r"Accepted password for (?P<user>\S+) from (?P<ip>[\d.]+) port \d+"
 )
+UFW_BLOCK_RE = re.compile(
+    r"\[UFW BLOCK\].*SRC=(?P<ip>[\d.]+).*DPT=(?P<port>\d+)"
+)
 
 
 def parse_line(line: str):
     """
     Returns a dict {event_type, source_ip, user, raw_line, timestamp} or None
-    if the line isn't an SSH login event we care about.
+    if the line isn't an SSH login or firewall block event we care about.
     """
     failed = FAILED_LOGIN_RE.search(line)
     if failed:
@@ -39,6 +42,15 @@ def parse_line(line: str):
             "event_type": "ssh_success",
             "source_ip": success.group("ip"),
             "user": success.group("user"),
+            "raw_line": line.strip(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    ufw_block = UFW_BLOCK_RE.search(line)
+    if ufw_block:
+        return {
+            "event_type": "firewall_block",
+            "source_ip": ufw_block.group("ip"),
             "raw_line": line.strip(),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
