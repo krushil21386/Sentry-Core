@@ -1,7 +1,4 @@
-"""
-Detection rules for SENTRY-CORE. Rule-based, no ML, no third-party IDS —
-this is the core logic that's actually yours.
-"""
+import re
 from datetime import datetime, timedelta, timezone
 
 from storage import db
@@ -9,6 +6,11 @@ from storage import db
 # --- Tunable thresholds ---
 BRUTEFORCE_FAILED_ATTEMPTS = 5     # how many failed logins...
 BRUTEFORCE_WINDOW_SECONDS = 60     # ...within this many seconds triggers an alert
+
+PORTSCAN_DISTINCT_PORTS = 10       # how many distinct ports...
+PORTSCAN_WINDOW_SECONDS = 10       # ...within this many seconds triggers an alert
+
+UFW_PORT_RE = re.compile(r"DPT=(?P<port>\d+)")
 
 
 def check_ssh_bruteforce(event: dict):
@@ -45,9 +47,52 @@ def check_ssh_bruteforce(event: dict):
     return None
 
 
+def check_port_scan(event: dict):
+    """
+    Called every time a new firewall_block event comes in.
+    Looks back PORTSCAN_WINDOW_SECONDS and counts distinct destination ports probed
+    by the same source IP. If over threshold, raises an alert.
+    """
+    if event["event_type"] != "firewall_block":
+        return None
+
+    source_ip = event["source_ip"]
+    now = datetime.now(timezone.utc)
+    window_start = (now - timedelta(seconds=PORTSCAN_WINDOW_SECONDS)).isoformat()
+
+    recent = db.recent_firewall_blocks(source_ip, window_start)
+    already_alerted = db.recent_alert_exists("port_scan", source_ip, window_start)
+
+    if already_alerted:
+        return None
+
+    ports = set()
+    for ev in recent:
+        match = UFW_PORT_RE.search(ev["raw_line"])
+        if match:
+            ports.add(match.group("port"))
+
+    if len(ports) >= PORTSCAN_DISTINCT_PORTS:
+        alert = {
+            "rule_name": "port_scan",
+            "source_ip": source_ip,
+            "severity": "medium",
+            "detail": f"Port scan detected from {source_ip}: {len(ports)} distinct ports probed "
+                      f"in {PORTSCAN_WINDOW_SECONDS}s (ports: {', '.join(sorted(ports))})",
+            "event_count": len(recent),
+            "window_seconds": PORTSCAN_WINDOW_SECONDS,
+            "timestamp": now.isoformat(),
+        }
+        db.insert_alert(**alert)
+        return alert
+
+    return None
+
+
 # Registry of all active rules — add new rules here as you build them
 ACTIVE_RULES = [
     check_ssh_bruteforce,
+    check_port_scan,
 ]
 
 
