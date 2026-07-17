@@ -6,7 +6,7 @@ Usage:
   python3 main.py --tail /var/log/auth.log        # follow a live log
 """
 import argparse
-
+from datetime import datetime, timedelta
 from detector import log_parser, rules
 from storage import db
 
