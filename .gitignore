@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+storage/sentry.db
+sentry.db
+.env
+.venv/
+env/
+venv/
