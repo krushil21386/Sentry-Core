@@ -1,0 +1,5 @@
+# Phase 1 (log parser + SQLite + rule engine) uses only the Python standard library.
+# Add dependencies here as you build later phases:
+fastapi
+uvicorn
+anthropic
