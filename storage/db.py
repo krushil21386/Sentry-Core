@@ -92,18 +92,6 @@ def recent_failed_logins(source_ip: str, since_timestamp: str):
         return [dict(r) for r in rows]
 
 
-def recent_firewall_blocks(source_ip: str, since_timestamp: str):
-    """All firewall_block events for an IP since a given ISO timestamp."""
-    with get_conn() as conn:
-        rows = conn.execute(
-            """SELECT * FROM events
-               WHERE source_ip = ? AND event_type = 'firewall_block' AND timestamp >= ?
-               ORDER BY timestamp ASC""",
-            (source_ip, since_timestamp),
-        ).fetchall()
-        return [dict(r) for r in rows]
-
-
 if __name__ == "__main__":
     init_db()
     print(f"Initialized DB at {DB_PATH}")
